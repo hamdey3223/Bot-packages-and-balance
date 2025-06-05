@@ -12,7 +12,7 @@ import csv
 from io import BytesIO
 
 BOT_TOKEN = "7845079461:AAGunkhjcJg3Flp-Ri_63zm9j2oBXFtdDV0"
-ADMIN_ID = 123456789  # حط الآي دي بتاعك هنا
+ADMIN_ID = 934143714  # حط الآي دي بتاعك هنا
 WHATSAPP_NUMBER = "201095587980"
 
 orders = []
