@@ -1,11 +1,33 @@
-# (نفس الاستيرادات والإعدادات السابقة)
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, KeyboardButton
+)
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
+    MessageHandler, ContextTypes, filters
+)
+from telegram.constants import ParseMode
+from datetime import datetime
+import csv
+from io import BytesIO
 
-# إعدادات البوت
-BOT_TOKEN = "7845079461:AAGunkhjcJg3Flp-Ri_63zm9j2oBXFtdDV0"
-ADMIN_ID = 934143714
+BOT_TOKEN = "توكن_البوت_هنا"
+ADMIN_ID = 123456789
 WHATSAPP_NUMBER = "201095587980"
 
 orders = []
+
+vodafone_offers = [
+    ("100", "🔴 فودافون 100 بـ 120 جنيه"),
+    ("200", "🔴 فودافون 200 بـ 260 جنيه"),
+    ("300", "🔴 فودافون 300 بـ 350 جنيه"),
+]
+
+etisalat_offers = [
+    ("100", "🟢 اتصالات 100 بـ 120 جنيه"),
+    ("200", "🟢 اتصالات 200 بـ 250 جنيه"),
+    ("300", "🟢 اتصالات 300 بـ 375 جنيه"),
+]
 
 flex_packages = [
     ("فليكس 40", "1000 فليكس - 50 جنيه"),
@@ -22,12 +44,6 @@ FLEX_NOTE = (
     "5 فليكس = دقيقة لأي شبكة أو للخط الأرضي"
 )
 
-offer_map = {
-    "voda_100": "🔴 فودافون 100 رصيد بـ 120 جنيه",
-    "etisalat_100": "🟢 اتصالات 100 رصيد بـ 125 جنيه",
-}
-
-# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("عروض رصيد", callback_data="offers")],
@@ -38,19 +54,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# أزرار التفاعل
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "offers":
         keyboard = [
-            [InlineKeyboardButton("🔴 فودافون 100 بـ 120", callback_data="order_voda_100")],
-            [InlineKeyboardButton("🟢 اتصالات 100 بـ 125", callback_data="order_etisalat_100")],
+            [InlineKeyboardButton("📲 فودافون", callback_data="order_Vodafone")],
+            [InlineKeyboardButton("📲 اتصالات", callback_data="order_Etisalat")],
         ]
         await query.edit_message_text(
-            text="📱 اختر نوع رصيدك حسب الشبكة والعرض:",
+            "اختار الشركة اللي عايز تشحن ليها:",
             reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    elif query.data == "order_Vodafone":
+        keyboard = [
+            [InlineKeyboardButton(desc, callback_data=f"confirm_Vodafone_{amount}")]
+            for amount, desc in vodafone_offers
+        ]
+        await query.edit_message_text("اختر قيمة الرصيد المطلوبة:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data == "order_Etisalat":
+        keyboard = [
+            [InlineKeyboardButton(desc, callback_data=f"confirm_Etisalat_{amount}")]
+            for amount, desc in etisalat_offers
+        ]
+        await query.edit_message_text("اختر قيمة الرصيد المطلوبة:", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif query.data.startswith("confirm_"):
+        _, company, amount = query.data.split("_", 2)
+        offer_text = f"{company} رصيد {amount}"
+        context.user_data["selected_offer"] = offer_text
+
+        keyboard = ReplyKeyboardMarkup(
+            [[KeyboardButton("📱 ارسال رقمي", request_contact=True)]],
+            one_time_keyboard=True,
+            resize_keyboard=True,
+        )
+        await query.message.reply_text(
+            f"💰 تم اختيار العرض: {offer_text}\nمن فضلك شارك رقم موبايلك علشان نكمل الطلب 👇",
+            reply_markup=keyboard
         )
 
     elif query.data == "flex":
@@ -72,8 +116,7 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
 
     elif query.data.startswith("order_"):
-        order_code = query.data.split("_", 1)[1]
-        offer_name = offer_map.get(order_code, order_code)
+        offer_name = query.data.split("_", 1)[1]
         context.user_data["selected_offer"] = offer_name
 
         keyboard = ReplyKeyboardMarkup(
@@ -87,8 +130,7 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "export_excel":
-        user_id = query.from_user.id
-        if user_id != ADMIN_ID:
+        if query.from_user.id != ADMIN_ID:
             await query.answer("❌ غير مصرح لك.", show_alert=True)
             return
         if not orders:
@@ -124,7 +166,6 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "cancel_clear":
         await admin_panel(update, context)
 
-# استلام الرقم
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact = update.message.contact
     phone = contact.phone_number
@@ -147,11 +188,10 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "💳 برجاء تحويل المبلغ إلى رقم فودافون كاش التالي:\n"
-        "📱 01095587980\n\n"
+        f"📱 {WHATSAPP_NUMBER}\n\n"
         "ثم قم بإرسال صورة (سكرين شوت) لعملية التحويل هنا داخل الشات."
     )
 
-# استلام سكرين شوت الدفع
 async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -195,7 +235,6 @@ async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAUL
 
     context.user_data.pop("order_details", None)
 
-# لوحة تحكم الأدمن
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.callback_query.from_user.id
     if user_id != ADMIN_ID:
@@ -210,11 +249,12 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# تشغيل البوت
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_buttons))
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.PHOTO, handle_payment_screenshot))
+
     application.run_polling()
