@@ -11,7 +11,7 @@ from datetime import datetime
 import csv
 from io import BytesIO
 
-BOT_TOKEN = "Y8058352424:AAHSOnxnsNQXXNfh4mLHRrZv5ca3LojWiOs"
+BOT_TOKEN = "7845079461:AAGunkhjcJg3Flp-Ri_63zm9j2oBXFtdDV0"
 ADMIN_ID = 123456789  # حط الآي دي بتاعك هنا
 WHATSAPP_NUMBER = "201095587980"
 
