@@ -1,15 +1,4 @@
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup,
-    ReplyKeyboardMarkup, KeyboardButton
-)
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler,
-    MessageHandler, ContextTypes, filters
-)
-from telegram.constants import ParseMode
-from datetime import datetime
-import csv
-from io import BytesIO
+# (نفس الاستيرادات والإعدادات السابقة)
 
 # إعدادات البوت
 BOT_TOKEN = "7845079461:AAGunkhjcJg3Flp-Ri_63zm9j2oBXFtdDV0"
@@ -17,9 +6,6 @@ ADMIN_ID = 934143714
 WHATSAPP_NUMBER = "201095587980"
 
 orders = []
-
-vodafone_offer = ("رصيد فودافون", "🔴 فودافون: 100 رصيد بـ 120 جنيه")
-etisalat_offer = ("رصيد اتصالات", "🟢 اتصالات: 100 رصيد بـ 125 جنيه")
 
 flex_packages = [
     ("فليكس 40", "1000 فليكس - 50 جنيه"),
@@ -36,6 +22,12 @@ FLEX_NOTE = (
     "5 فليكس = دقيقة لأي شبكة أو للخط الأرضي"
 )
 
+offer_map = {
+    "voda_100": "🔴 فودافون 100 رصيد بـ 120 جنيه",
+    "etisalat_100": "🟢 اتصالات 100 رصيد بـ 125 جنيه",
+}
+
+# /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("عروض رصيد", callback_data="offers")],
@@ -46,18 +38,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# أزرار التفاعل
 async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "offers":
         keyboard = [
-            [InlineKeyboardButton("📲 اطلب فودافون", callback_data="order_Vodafone")],
-            [InlineKeyboardButton("📲 اطلب اتصالات", callback_data="order_Etisalat")],
+            [InlineKeyboardButton("🔴 فودافون 100 بـ 120", callback_data="order_voda_100")],
+            [InlineKeyboardButton("🟢 اتصالات 100 بـ 125", callback_data="order_etisalat_100")],
         ]
-        offers_text = f"{vodafone_offer[1]}\n{etisalat_offer[1]}"
         await query.edit_message_text(
-            text=offers_text, reply_markup=InlineKeyboardMarkup(keyboard)
+            text="📱 اختر نوع رصيدك حسب الشبكة والعرض:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
     elif query.data == "flex":
@@ -79,7 +72,8 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break
 
     elif query.data.startswith("order_"):
-        offer_name = query.data.split("_", 1)[1]
+        order_code = query.data.split("_", 1)[1]
+        offer_name = offer_map.get(order_code, order_code)
         context.user_data["selected_offer"] = offer_name
 
         keyboard = ReplyKeyboardMarkup(
@@ -130,12 +124,12 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "cancel_clear":
         await admin_panel(update, context)
 
+# استلام الرقم
 async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact = update.message.contact
     phone = contact.phone_number
     user = update.message.from_user
 
-    # ✅ لا يُسمح بإرسال الرقم إلا بعد اختيار عرض
     selected_offer = context.user_data.get("selected_offer")
     if not selected_offer:
         await update.message.reply_text("❗ من فضلك اختر العرض أولاً قبل إرسال رقم الهاتف.")
@@ -157,6 +151,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "ثم قم بإرسال صورة (سكرين شوت) لعملية التحويل هنا داخل الشات."
     )
 
+# استلام سكرين شوت الدفع
 async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.message.from_user
 
@@ -200,6 +195,7 @@ async def handle_payment_screenshot(update: Update, context: ContextTypes.DEFAUL
 
     context.user_data.pop("order_details", None)
 
+# لوحة تحكم الأدمن
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.callback_query.from_user.id
     if user_id != ADMIN_ID:
@@ -214,12 +210,11 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# تشغيل البوت
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_buttons))
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.PHOTO, handle_payment_screenshot))
-
     application.run_polling()
