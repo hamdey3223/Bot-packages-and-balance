@@ -11,24 +11,27 @@ from datetime import datetime
 import csv
 from io import BytesIO
 
-BOT_TOKEN = "7845079461:AAGunkhjcJg3Flp-Ri_63zm9j2oBXFtdDV0"
-ADMIN_ID = 123456789
+BOT_TOKEN = "YOUR_BOT_TOKEN"
+ADMIN_ID = 123456789  # حط الآي دي بتاعك هنا
 WHATSAPP_NUMBER = "201095587980"
 
 orders = []
 
-vodafone_offers = [
-    ("100", "🔴 فودافون 100 بـ 120 جنيه"),
-    ("200", "🔴 فودافون 200 بـ 260 جنيه"),
-    ("300", "🔴 فودافون 300 بـ 350 جنيه"),
-]
+# عروض الرصيد
+credit_offers = {
+    "فودافون": {
+        "100": 120,
+        "200": 260,
+        "300": 350,
+    },
+    "اتصالات": {
+        "100": 120,
+        "200": 250,
+        "300": 375,
+    }
+}
 
-etisalat_offers = [
-    ("100", "🟢 اتصالات 100 بـ 120 جنيه"),
-    ("200", "🟢 اتصالات 200 بـ 250 جنيه"),
-    ("300", "🟢 اتصالات 300 بـ 375 جنيه"),
-]
-
+# باقات فليكس
 flex_packages = [
     ("فليكس 40", "1000 فليكس - 50 جنيه"),
     ("فليكس 45", "1500 فليكس - 60 جنيه"),
@@ -60,50 +63,24 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "offers":
         keyboard = [
-            [InlineKeyboardButton("📲 فودافون", callback_data="order_Vodafone")],
-            [InlineKeyboardButton("📲 اتصالات", callback_data="order_Etisalat")],
+            [InlineKeyboardButton("🔴 فودافون", callback_data="credit_Vodafone")],
+            [InlineKeyboardButton("🟢 اتصالات", callback_data="credit_Etisalat")],
         ]
-        await query.edit_message_text(
-            "اختار الشركة اللي عايز تشحن ليها:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await query.edit_message_text("اختر الشبكة:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif query.data == "order_Vodafone":
-        keyboard = [
-            [InlineKeyboardButton(desc, callback_data=f"confirm_Vodafone_{amount}")]
-            for amount, desc in vodafone_offers
+    elif query.data.startswith("credit_"):
+        company = query.data.split("_")[1]
+        company = "فودافون" if company == "Vodafone" else "اتصالات"
+        buttons = [
+            [InlineKeyboardButton(f"{value} جنيه رصيد بـ {price} جنيه", callback_data=f"order_{company}_{value}")]
+            for value, price in credit_offers[company].items()
         ]
-        await query.edit_message_text("اختر قيمة الرصيد المطلوبة:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif query.data == "order_Etisalat":
-        keyboard = [
-            [InlineKeyboardButton(desc, callback_data=f"confirm_Etisalat_{amount}")]
-            for amount, desc in etisalat_offers
-        ]
-        await query.edit_message_text("اختر قيمة الرصيد المطلوبة:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif query.data.startswith("confirm_"):
-        _, company, amount = query.data.split("_", 2)
-        offer_text = f"{company} رصيد {amount}"
-        context.user_data["selected_offer"] = offer_text
-
-        keyboard = ReplyKeyboardMarkup(
-            [[KeyboardButton("📱 ارسال رقمي", request_contact=True)]],
-            one_time_keyboard=True,
-            resize_keyboard=True,
-        )
-        await query.message.reply_text(
-            f"💰 تم اختيار العرض: {offer_text}\nمن فضلك شارك رقم موبايلك علشان نكمل الطلب 👇",
-            reply_markup=keyboard
-        )
+        await query.edit_message_text(f"اختر قيمة رصيد {company}:", reply_markup=InlineKeyboardMarkup(buttons))
 
     elif query.data == "flex":
         keyboard = [[InlineKeyboardButton(name, callback_data=f"flex_{name}")]
                     for name, _ in flex_packages]
-        await query.edit_message_text(
-            "اختر باقة الفليكس اللي تناسبك:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await query.edit_message_text("اختر باقة الفليكس اللي تناسبك:", reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif query.data.startswith("flex_"):
         selected = query.data.split("_", 1)[1]
@@ -130,7 +107,8 @@ async def handle_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data == "export_excel":
-        if query.from_user.id != ADMIN_ID:
+        user_id = query.from_user.id
+        if user_id != ADMIN_ID:
             await query.answer("❌ غير مصرح لك.", show_alert=True)
             return
         if not orders:
@@ -170,13 +148,26 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     contact = update.message.contact
     phone = contact.phone_number
     user = update.message.from_user
-
     selected_offer = context.user_data.get("selected_offer")
+
     if not selected_offer:
         await update.message.reply_text("❗ من فضلك اختر العرض أولاً قبل إرسال رقم الهاتف.")
         return
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    price = "❓"
+
+    if any(net in selected_offer for net in ["فودافون", "اتصالات"]):
+        for network in credit_offers:
+            for value in credit_offers[network]:
+                if network in selected_offer and value in selected_offer:
+                    price = f"{credit_offers[network][value]} جنيه"
+                    break
+    else:
+        for name, desc in flex_packages:
+            if name == selected_offer:
+                price = desc.split(" - ")[1]
+                break
 
     context.user_data["order_details"] = {
         "name": user.full_name,
@@ -187,7 +178,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     await update.message.reply_text(
-        "💳 برجاء تحويل المبلغ إلى رقم فودافون كاش التالي:\n"
+        f"💳 برجاء تحويل المبلغ التالي: {price} إلى رقم فودافون كاش:\n"
         f"📱 {WHATSAPP_NUMBER}\n\n"
         "ثم قم بإرسال صورة (سكرين شوت) لعملية التحويل هنا داخل الشات."
     )
